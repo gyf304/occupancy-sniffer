@@ -1,0 +1,22 @@
+CC = xtensa-lx106-elf-gcc
+CFLAGS = -I. -mlongcalls -Os -DICACHE_FLASH -std=c99
+LDLIBS = -nostdlib -Wl,--start-group -lmain -lnet80211 -lwpa -lwpa2 -llwip -lpp -lphy -lc -Wl,--end-group -lgcc
+LDFLAGS = -Teagle.app.v6.ld
+#LDFLAGS = -Teagle.app.v6.new.2048.ld
+
+
+sniff-0x00000.bin: sniff
+	esptool.py elf2image $^
+
+sniff: sniff.o led.o bloom.o xtea.o
+
+led.o: led.c
+sniff.o: sniff.c
+bloom.o: bloom.c
+xtea.o: xtea.c
+
+flash: sniff-0x00000.bin
+	esptool.py write_flash 0 blinky-0x00000.bin 0x10000 blinky-0x10000.bin
+
+clean:
+	rm -f sniff *.o sniff-0x00000.bin sniff-0x10000.bin

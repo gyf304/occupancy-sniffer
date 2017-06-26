@@ -1,0 +1,7 @@
+Byte    Description
+0-3     VERSION / MODE. Reserved, currently always 0;
+4-7     Raw Data Length. 32 bits unsigned big-endian, not including first 8 bytes.
+8-15    XTEA-CBC-MAC, big-endian.
+16++    XTEA-CTR Data, big-endian.
+        | - 0-3   Encrypted Data Length. 32 bits unsigned big-endian.
+        | - 4+    Data
