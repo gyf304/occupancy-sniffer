@@ -1,5 +1,6 @@
 #include "discover.h"
 #include "led.h"
+#include "bloom.h"
 #include "config.h"
 #include "osapi.h"
 #include "user_interface.h"
@@ -20,6 +21,8 @@ struct cached_device {
 #define DISCOVER_RECENT_DEVICES 10
 struct cached_device recent_devices[DISCOVER_RECENT_DEVICES];
 
+bloom_t device_bloom;
+
 static void ICACHE_FLASH_ATTR
 sniff_cb(uint8_t* _buf, uint16_t len) 
 {
@@ -37,68 +40,10 @@ sniff_cb(uint8_t* _buf, uint16_t len)
   device.channel = sniff_channel;
   os_memcpy(&device.mac[0], &buf->frame.addr2[0], 6);
 
-  // os_printf("RAW: %02X:%02X:%02X:%02X:%02X:%02X,", 
-  //           device.mac[0], device.mac[1], 
-  //           device.mac[2], device.mac[3], 
-  //           device.mac[4], device.mac[5]);
-  // os_printf("%d,", device.rssi);
-  // os_printf("%d\n", device.channel);
-
-  uint32_t cur_time = system_get_time();
-  // in any case, we need to evict ones that are too old.
-  for (uint8_t i = 0; i < DISCOVER_RECENT_DEVICES; i++)
+  if (!bloom_is_in(device_bloom, &device.mac[0], 6)) 
   {
-    if (recent_devices[i].hit && cur_time - recent_devices[i].t > EVICT_TIME_US) 
-    {
-      if (discover_cb) (*discover_cb)(&recent_devices[i].device);
-      recent_devices[i].hit = 0;
-    }
-  }
-
-  bool evict = true;
-  // find if the discovered device is recent, cache if recent
-  for (uint8_t i = 0; i < DISCOVER_RECENT_DEVICES; i++)
-  {
-    // if blank spot found
-    if (recent_devices[i].hit == 0)
-    {
-      recent_devices[i].hit = 1;
-      recent_devices[i].t = cur_time;
-      os_memcpy(&recent_devices[i].device, &device, sizeof(wifi_device_t));
-      evict = false;
-      break;
-    }
-    // otherwise if there's already such a device
-    if (recent_devices[i].hit && wifi_device_eq(&recent_devices[i].device, &device))
-    {
-      // update rssi to an averaged value
-      recent_devices[i].device.rssi = 
-        ((int32_t)recent_devices[i].device.rssi * (int32_t)recent_devices[i].hit + (int32_t)device.rssi) / 
-        ((int32_t)recent_devices[i].hit+1);
-      recent_devices[i].hit++;
-      recent_devices[i].t = cur_time;
-      evict = false;
-      break;
-    }
-  }
-  // if we didn't cache anything before, we need to evict something, and then cache
-  if (evict) {
-    uint8_t evict_index = 0;
-    uint32_t min_t = (uint32_t)-1;
-    for (uint8_t i = 0; i < DISCOVER_RECENT_DEVICES; i++)
-    {
-      if (min_t > recent_devices[i].t)
-      {
-        min_t = recent_devices[i].t;
-        evict_index = i;
-      }
-    }
-    // now call cb for the evicted one
-    if (discover_cb) (*discover_cb)(&recent_devices[evict_index].device);
-    // now store our current one in there
-    os_memcpy(&recent_devices[evict_index].device, &device, sizeof(wifi_device_t));
-    recent_devices[evict_index].hit = 1;
-    recent_devices[evict_index].t = cur_time;
+    if (discover_cb) (*discover_cb)(&device);
+    bloom_add(device_bloom, &device.mac[0], 6);
   }
 }
 
@@ -115,6 +60,7 @@ discover_start(uint8_t channel)
 {
   if (state != DISCOVER_STATE_STANDBY) return false;
   // setup sniffing
+  if (!bloom_create(&device_bloom, BLOOM_SIZE, BLOOM_HASH_VIARATIONS)) return false;
   wifi_set_opmode(STATION_MODE);
   sniff_channel = channel;
   wifi_set_channel(channel);
@@ -132,15 +78,8 @@ discover_stop() {
   if (state != DISCOVER_STATE_ACTIVE) return false;
   wifi_promiscuous_enable(0);
   state = DISCOVER_STATE_STANDBY;
-  // and evict all cache
-  for (uint8_t i = 0; i < DISCOVER_RECENT_DEVICES; i++)
-  {
-    if (recent_devices[i].hit)
-    {
-      if (discover_cb) (*discover_cb)(&recent_devices[i].device);
-    }
-  }
   os_memset(&recent_devices[0], 0, sizeof(recent_devices));
+  if (!bloom_destroy(device_bloom)) return false;
   return true;
 }
 

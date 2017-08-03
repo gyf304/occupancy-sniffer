@@ -6,7 +6,6 @@
 #include "led.h"
 #include "config.h"
 #include "discover.h"
-#include "report.h"
 #include "wifi_client.h"
 #include "xtea.h"
 #include "comm.h"
@@ -18,8 +17,18 @@ static os_timer_t discover_timer;
 
 static comm_state_t report_comm_state;
 static const comm_info_t report_comm_info = 
-  {COMM_PROTOCOL_HTTP_XTEA_RPC, {.http = {API_HOSTNAME, API_PATH, API_PORT}}};
-static report_t report;
+  {COMM_PROTOCOL_HXDT, 
+    {.hxdt = 
+      {
+        API_HOSTNAME, 
+        API_PATH, 
+        API_PORT, 
+        (uint8_t*)ENCRYPT_KEY, 
+        (uint8_t*)AUTH_KEY, 
+        (uint8_t[])AUTH_IV
+      }
+    }
+  };
 
 void ICACHE_FLASH_ATTR
 device_cb(wifi_device_t* device) {
@@ -67,7 +76,6 @@ discover_done_cb(void* info)
 
 void ICACHE_FLASH_ATTR
 mode_discover() {
-  report_create(&report, REPORT_SIZE);
   discover_init(&device_cb);
   os_timer_disarm(&discover_timer);
   os_timer_setfn(&discover_timer, (os_timer_func_t *)discover_done_cb, NULL);
@@ -99,14 +107,23 @@ wifi_client_cb(uint32_t status)
 }
 
 void ICACHE_FLASH_ATTR
+stack_test(uint32_t a, uint32_t b, uint32_t c, uint64_t d)
+{
+  os_printf("a, b, c, d, %p, %p, %p, %p\n", &a, &b, &c, &d);
+}
+
+
+void ICACHE_FLASH_ATTR
 after_init()
 {
   #ifdef DEBUG
     os_printf("DEBUG MODE\n");
   #endif
   led_blink(BLINK_POWER_ON);
-  //comm_create(&report_comm_state, &report_comm_info, COMM_BUFFER_SIZE);
+  comm_create(&report_comm_state, &report_comm_info, COMM_BUFFER_SIZE);
+  //comm_writef(report_comm_state, "i", 32);
   //comm_destroy(report_comm_state);
+  stack_test(0,0,0,0);
   mode_discover();
 }
 

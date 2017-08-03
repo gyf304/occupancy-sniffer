@@ -64,8 +64,9 @@ bloom_is_in(bloom_t b, uint8_t* x, uint32_t elem_size) {
   return true;
 }
 
-void ICACHE_FLASH_ATTR
+bool ICACHE_FLASH_ATTR
 bloom_destroy(bloom_t b)
 {
   os_free(b);
+  return true;
 }
