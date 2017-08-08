@@ -116,11 +116,13 @@ comm_send_hxdt(comm_state_t cstate)
   // encrypt
   if (XTEA_SUCCESS != xtea_ctr(&ctr_info, cryptogram_ptr, cryptogram_ptr, xtea_size)) {
     hxdt_error(COMM_GENERIC_ERROR);
+    comm_hxdt_free(pstate);
     return;
   }
   // calculate cbc-mac
   if (XTEA_SUCCESS != xtea_cbc_mac(&mac_info, &header->cbc_mac[0], cryptogram_ptr, xtea_size)) {
     hxdt_error(COMM_GENERIC_ERROR);
+    comm_hxdt_free(pstate);
     return;
   }
   // find dns for host
@@ -141,6 +143,7 @@ comm_send_hxdt(comm_state_t cstate)
     case ESPCONN_ARG:
       // badthing happened..
       hxdt_error(COMM_GENERIC_ERROR);
+      comm_hxdt_free(pstate);
       break;
     }
   return;
