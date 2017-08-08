@@ -1,3 +1,4 @@
 user/config.h
 build/*
 .vscode/*
+*.o
