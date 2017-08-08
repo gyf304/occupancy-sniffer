@@ -1,4 +1,5 @@
 user/config.h
+firmware/*
 build/*
 .vscode/*
 *.o
