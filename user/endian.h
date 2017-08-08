@@ -2,12 +2,12 @@
 #define _ENDIAN_H
 #include "os_type.h"
 
-static inline void endian_convert(void* out, const void* in, uint8_t size)
+static inline uint32_t htobe32(uint32_t num)
 {
-  uint8_t k = size / 2;
-  for (uint8_t i = 0; i < k; i++) {
-    ((char*)out)[i] = ((char*)in)[size-i-1];
-  }
+  return  ((num>>24)&0xff)     | // move byte 3 to byte 0
+          ((num<<8) &0xff0000) | // move byte 1 to byte 2
+          ((num>>8) &0xff00)   | // move byte 2 to byte 1
+          ((num<<24)&0xff000000); // byte 0 to byte 3
 }
 
 #endif

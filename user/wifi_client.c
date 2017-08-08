@@ -39,6 +39,8 @@ wifi_cb(System_Event_t *evt)
             break;
           case WIFI_CLIENT_STATE_DISCONNECTING:
             (*wifi_client_cb)(WIFI_CLIENT_DISCONNECT_SUCCESS);
+          case WIFI_CLIENT_STATE_DISCONNECTED:
+            break;
           default:
             (*wifi_client_cb)(WIFI_CLIENT_DISCONNECTED);
             break;
@@ -59,14 +61,14 @@ wifi_cb(System_Event_t *evt)
 }
 
 bool ICACHE_FLASH_ATTR
-wifi_client_init(wifi_client_info_t* info, wifi_client_cb_t* cb) {
+wifi_client_init(const wifi_client_info_t* info, wifi_client_cb_t* cb) {
   if (state != WIFI_CLIENT_STATE_DISCONNECTED &&
       state != WIFI_CLIENT_STATE_OFF) return false;
   // set wifi info
   os_memset(&conf, 0, sizeof(struct station_config));
   conf.bssid_set = 0;
-  os_memcpy(&conf.ssid, info->ssid, info->ssid_len);
-  os_memcpy(&conf.password, info->password, info->password_len);
+  os_memcpy(&conf.ssid, info->ssid, os_strlen(info->ssid));
+  os_memcpy(&conf.password, info->password, os_strlen(info->password));
 
   timeout = info->timeout;
 

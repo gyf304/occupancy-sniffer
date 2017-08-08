@@ -7,10 +7,8 @@
 typedef void (wifi_client_cb_t)(uint32_t status);
 
 typedef struct wifi_client_info {
-  uint8_t* ssid;
-  uint8_t ssid_len;
-  uint8_t* password;
-  uint8_t password_len;
+  char* ssid;
+  char* password;
   uint16_t timeout;
 } wifi_client_info_t;
 
@@ -34,7 +32,7 @@ enum {
     WIFI_CLIENT_STATE_OFF
 };
 
-bool wifi_client_init(wifi_client_info_t* info, wifi_client_cb_t* cb);
+bool wifi_client_init(const wifi_client_info_t* info, wifi_client_cb_t* cb);
 bool wifi_client_connect();
 bool wifi_client_disconnect();
 
