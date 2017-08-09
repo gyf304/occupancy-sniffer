@@ -17,10 +17,6 @@ struct cached_device {
 };
 
 // this is for dedup: a device can send out multiple pr frames at once
-#define EVICT_TIME_US 100000
-#define DISCOVER_RECENT_DEVICES 10
-struct cached_device recent_devices[DISCOVER_RECENT_DEVICES];
-
 bloom_t device_bloom;
 
 static void ICACHE_FLASH_ATTR
@@ -51,7 +47,6 @@ bool ICACHE_FLASH_ATTR
 discover_init(discover_device_cb_t* cb) {
   discover_cb = cb;
   state = DISCOVER_STATE_STANDBY;
-  os_memset(&recent_devices[0], 0, sizeof(recent_devices));
   return true;
 }
 
@@ -78,7 +73,6 @@ discover_stop() {
   if (state != DISCOVER_STATE_ACTIVE) return false;
   wifi_promiscuous_enable(0);
   state = DISCOVER_STATE_STANDBY;
-  os_memset(&recent_devices[0], 0, sizeof(recent_devices));
   if (!bloom_destroy(device_bloom)) return false;
   return true;
 }

@@ -72,7 +72,7 @@ user_init()
 void ICACHE_FLASH_ATTR
 after_init()
 {
-  dbg_printf("DEBUG MODE\n");
+  dbg_printf("[INFO] DEBUG MODE\n");
   led_blink(BLINK_POWER_ON);
   discover_setup();
 }
@@ -103,12 +103,13 @@ discover_setup() {
 
 void ICACHE_FLASH_ATTR
 device_cb(wifi_device_t* device) {
-  dbg_printf("CB: %02X:%02X:%02X:%02X:%02X:%02X,", 
+  dbg_printf("[INFO] Device: %02X:%02X:%02X:%02X:%02X:%02X,", 
             device->mac[0], device->mac[1], 
             device->mac[2], device->mac[3], 
             device->mac[4], device->mac[5]);
-  dbg_printf("%d,", device->rssi);
-  dbg_printf("%d\n", device->channel);
+  dbg_printf(" RSSI %d,", device->rssi);
+  dbg_printf(" CHN %d\n", device->channel);
+  led_blink(BLINK_ACTIVITY);
   comm_write(report_comm_state, device, sizeof(wifi_device_t));
 }
 
@@ -116,7 +117,8 @@ void ICACHE_FLASH_ATTR
 discover_done_cb(void* info)
 {
   discover_stop();
-  dbg_printf("Discover Done\n");
+  led_blink(BLINK_REPORT);
+  dbg_printf("[INFO] Discover Done\n");
   // connect to wifi
   wifi_client_connect();
 }
@@ -130,7 +132,7 @@ wifi_client_connected_cb()
 void ICACHE_FLASH_ATTR
 report_cb(uint8_t err, uint8_t* buf, uint32_t len)
 {
-  dbg_printf("report_done, error code %d\n", err);
+  dbg_printf("[INFO] Report done, error code %d\n", err);
   comm_destroy(report_comm_state);
   wifi_client_disconnect();
 }
@@ -147,11 +149,11 @@ wifi_client_cb(uint32_t status)
 {
   switch (status) {
     case WIFI_CLIENT_CONNECT_SUCCESS:
-      dbg_printf("[OK] WIFI CONNECTED\n");
+      dbg_printf("[INFO] WIFI CONNECTED\n");
       wifi_client_connected_cb(); 
       break;
     case WIFI_CLIENT_DISCONNECT_SUCCESS:
-      dbg_printf("[OK] WIFI DISCONNECTED\n");
+      dbg_printf("[INFO] WIFI DISCONNECTED\n");
       wifi_client_disconnected_cb();
       break;
     default:
