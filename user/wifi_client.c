@@ -6,32 +6,18 @@ static uint32_t state = WIFI_CLIENT_STATE_OFF;
 static wifi_client_cb_t* wifi_client_cb = NULL;
 static uint16_t timeout = 0;
 
-static void ICACHE_FLASH_ATTR
-wifi_client_timeout_cb(void* arg)
-{
-  switch (state) {
-    case WIFI_CLIENT_STATE_CONNECTING:
-      (*wifi_client_cb)(WIFI_CLIENT_CONNECT_TIMEOUT);
-      break;
-    case WIFI_CLIENT_STATE_DISCONNECTING:
-      (*wifi_client_cb)(WIFI_CLIENT_DISCONNECT_TIMEOUT);
-    default:
-      break;
-  }
-}
-
 static void ICACHE_FLASH_ATTR 
 wifi_cb(System_Event_t *evt)
 {
   switch (evt->event) {
     case EVENT_STAMODE_GOT_IP:
-      os_timer_disarm(&wifi_client_timeout_timer);
+      // os_timer_disarm(&wifi_client_timeout_timer);
       if (wifi_client_cb) (*wifi_client_cb)(WIFI_CLIENT_CONNECT_SUCCESS);
       state = WIFI_CLIENT_STATE_CONNECTED;
       break;
 
     case EVENT_STAMODE_DISCONNECTED:
-      os_timer_disarm(&wifi_client_timeout_timer);
+      // os_timer_disarm(&wifi_client_timeout_timer);
       if (wifi_client_cb) {
         switch (state) {
           case WIFI_CLIENT_STATE_CONNECTING:
@@ -94,10 +80,10 @@ wifi_client_connect()
   wifi_set_event_handler_cb(wifi_cb);
 
   // timer
-  os_timer_disarm(&wifi_client_timeout_timer);
-  os_timer_setfn(&wifi_client_timeout_timer, 
-                 (os_timer_func_t *)wifi_client_timeout_cb, NULL);
-  os_timer_arm(&wifi_client_timeout_timer, timeout, 0);
+  // os_timer_disarm(&wifi_client_timeout_timer);
+  // os_timer_setfn(&wifi_client_timeout_timer, 
+  //                (os_timer_func_t *)wifi_client_timeout_cb, NULL);
+  // os_timer_arm(&wifi_client_timeout_timer, timeout, 0);
   
   state = WIFI_CLIENT_STATE_CONNECTING;
   

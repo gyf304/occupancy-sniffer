@@ -9,6 +9,8 @@ typedef void (comm_cb_t)(uint8_t err, uint8_t* buf, uint32_t len);
 
 typedef struct comm_info {
   uint8_t protocol;
+  uint32_t send_buffer_size;
+  uint32_t recv_buffer_size;
   union {
     const struct hxdt_info* hxdt;
   };
@@ -25,14 +27,17 @@ typedef struct hxdt_info {
 
 // the following are supposed to be private...
 typedef struct comm_state* comm_state_t;
+typedef struct comm_buffer comm_buffer_t;
 
 enum {
   COMM_OK = 0,
   COMM_UNSUPPORTED_PROTOCOL,
   COMM_INVALID_ARGS,
-  COMM_GENERIC_ERROR,
   COMM_BUFFER_OVERFLOW,
-  COMM_MALLOC_ERROR
+  COMM_MALLOC_ERROR,
+  COMM_CLIENT_GENERIC_ERROR,
+  COMM_SERVER_GENERIC_ERROR,
+  COMM_NOT_READY
 };
 
 enum {
@@ -40,23 +45,7 @@ enum {
   COMM_PROTOCOL_TXDT
 };
 
-enum {
-  COMM_CB_DATA = 0,
-  COMM_CB_ERROR
-};
-
-struct comm_state {
-  uint8_t* buffer;
-  uint32_t size;
-  uint32_t max_size;
-  uint8_t protocol;
-  comm_cb_t* cb;
-  struct comm_info info;
-  void* pstate;
-} __attribute__ ((aligned (4)));
-
-
-uint8_t comm_create   (comm_state_t* state_ptr, comm_info_t info, uint32_t buflen, comm_cb_t* cb);
+uint8_t comm_create   (comm_state_t* state_ptr, comm_info_t info, comm_cb_t* cb);
 uint8_t comm_write    (comm_state_t state, void* buf, uint32_t size);
 uint8_t comm_writef   (comm_state_t state, char* fmt, ...);
 void    comm_send     (comm_state_t state);

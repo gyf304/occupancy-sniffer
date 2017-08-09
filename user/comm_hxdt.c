@@ -3,8 +3,7 @@
 #include "ets_sys.h"
 #include "osapi.h"
 #include "mem.h"
-#include "comm.h"
-#include "config.h"
+#include "comm_internal.h"
 #include "endian.h"
 #include "xtea.h"
 #include "espconn.h"
@@ -21,7 +20,6 @@
 #define ROUND_DOWN(N,S) ((N / S) * S)
 #define ROUND_UP(N, S) ((((N) + (S) - 1) / (S)) * (S))
 #define HXDT_OVERHEAD_SIZE (ROUND_UP(256 + sizeof(struct hxdt_header), 4))
-#define HXDT_RECV_BUFFER_SIZE 4096
 
 struct hxdt_header {
   uint32_t version;
@@ -72,11 +70,24 @@ comm_send_hxdt(comm_state_t cstate)
   }
   pstate->cstate = cstate;
   const struct hxdt_info* info = cstate->info.hxdt;
-  const uint32_t xtea_size = ROUND_UP(cstate->size, XTEA_BLOCK_SIZE);
+  const uint32_t xtea_size = ROUND_UP(cstate->send_buffer.len, XTEA_BLOCK_SIZE);
   // round up to XTEA_BLOCK_SIZE
   // initialize tcp buffer
   uint8_t* hxdt_buffer = os_malloc(HXDT_OVERHEAD_SIZE + xtea_size);
   pstate->send_buffer = hxdt_buffer;
+  if (hxdt_buffer == NULL) {
+    hxdt_error(COMM_MALLOC_ERROR);
+    comm_hxdt_free(pstate);
+    return;
+  }
+  // recv buffer
+  pstate->recv_buffer = os_malloc(cstate->recv_buffer.size);
+  pstate->recv_buffer_len = 0;
+  if (pstate->recv_buffer == NULL) {
+    hxdt_error(COMM_MALLOC_ERROR);
+    comm_hxdt_free(pstate);
+    return;
+  }
   // write to tcp buffer
   int http_header_len = os_sprintf(
     (char*)hxdt_buffer, 
@@ -85,24 +96,30 @@ comm_send_hxdt(comm_state_t cstate)
     info->hostname, 
     sizeof(struct hxdt_header) + xtea_size);
   if (http_header_len < 0) {
-    hxdt_error(COMM_GENERIC_ERROR);
+    hxdt_error(COMM_CLIENT_GENERIC_ERROR);
     comm_hxdt_free(pstate);
     return;
   }
   // construct header
-  struct hxdt_header* header = (void*)((char*)hxdt_buffer + http_header_len);
-  uint8_t* cryptogram_ptr = ((uint8_t*)header) + sizeof(struct hxdt_header);
+  void* header_ptr = (void*)((char*)hxdt_buffer + http_header_len);
+  struct hxdt_header* header = os_zalloc(sizeof(struct hxdt_header));
+  if (header == NULL) {
+    hxdt_error(COMM_MALLOC_ERROR);
+    comm_hxdt_free(pstate);
+    return;
+  }
+  uint8_t* cryptogram_ptr = ((uint8_t*)header_ptr) + sizeof(struct hxdt_header);
   header->version = htobe32(0);
   // write data lengths
   header->xtea_length = htobe32(xtea_size);
-  header->payload_length = htobe32(cstate->size);
+  header->payload_length = htobe32(cstate->send_buffer.len);
   // generate iv
   os_memset(&header->ctr_iv[0], 0, XTEA_BLOCK_SIZE);
   os_get_random(&header->ctr_iv[0], XTEA_BLOCK_SIZE / 2);
   // copy content
-  os_memcpy(cryptogram_ptr, cstate->buffer, cstate->size);
+  os_memcpy(cryptogram_ptr, cstate->send_buffer.buffer, cstate->send_buffer.len);
   // pad
-  os_memset(cryptogram_ptr + cstate->size, 0, xtea_size - cstate->size);
+  os_memset(cryptogram_ptr + cstate->send_buffer.len, 0, xtea_size - cstate->send_buffer.len);
   // calculate tcp buffer size...
   pstate->send_buffer_len = http_header_len + sizeof(struct hxdt_header) + xtea_size;
   // encrypt using xtea-ctr
@@ -112,19 +129,21 @@ comm_send_hxdt(comm_state_t cstate)
   ctr_info.iv = &header->ctr_iv[0];
   mac_info.key = &info->auth_key[0];
   mac_info.iv = &info->auth_iv[0];
-  os_printf("Encryptkey: %s\n", ctr_info.key);
   // encrypt
   if (XTEA_SUCCESS != xtea_ctr(&ctr_info, cryptogram_ptr, cryptogram_ptr, xtea_size)) {
-    hxdt_error(COMM_GENERIC_ERROR);
+    hxdt_error(COMM_CLIENT_GENERIC_ERROR);
     comm_hxdt_free(pstate);
     return;
   }
   // calculate cbc-mac
   if (XTEA_SUCCESS != xtea_cbc_mac(&mac_info, &header->cbc_mac[0], cryptogram_ptr, xtea_size)) {
-    hxdt_error(COMM_GENERIC_ERROR);
+    hxdt_error(COMM_CLIENT_GENERIC_ERROR);
     comm_hxdt_free(pstate);
     return;
   }
+  // copy header to actual location
+  os_memcpy(header_ptr, header, sizeof(struct hxdt_header));
+  os_free(header);
   // find dns for host
   pstate->ip.addr = 0;
   switch (
@@ -140,9 +159,9 @@ comm_send_hxdt(comm_state_t cstate)
       os_printf("dns wait\n");
       pstate->status = HXDT_STATUS_TCP_CONN;
       break;
-    case ESPCONN_ARG:
+    default:
       // badthing happened..
-      hxdt_error(COMM_GENERIC_ERROR);
+      hxdt_error(COMM_CLIENT_GENERIC_ERROR);
       comm_hxdt_free(pstate);
       break;
     }
@@ -163,15 +182,12 @@ comm_hxdt_dns_cb(const char *name, ip_addr_t *ipaddr, void *arg)
   //if (ipaddr == NULL) pstate->status = HXDT_STATUS_ERROR;
   if (pstate->ip.addr == 0) {
     // got invalid ip
-    hxdt_error(COMM_GENERIC_ERROR);
+    hxdt_error(COMM_CLIENT_GENERIC_ERROR);
     comm_hxdt_free(pstate);
     return;
   }
   uint8_t* ip = (void*)ipaddr;
-  os_printf("IP: %d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]);
   // configure tcp
-  pstate->recv_buffer = os_malloc(HXDT_RECV_BUFFER_SIZE);
-  pstate->recv_buffer_len = 0;
   pstate->recv_error = false;
   pstate->tcp_conn.proto.tcp = &pstate->tcp_info;
   pstate->tcp_conn.type = ESPCONN_TCP;
@@ -193,7 +209,6 @@ comm_hxdt_connect_cb(void *arg)
 {
   struct hxdt_state* pstate = (void*)((char*)arg - offsetof(struct hxdt_state, tcp_conn));
   struct comm_state* cstate = pstate->cstate;
-  os_printf("tcp conn\n");
   #define hxdt_error(err) if (cstate->cb) (*cstate->cb)(err, NULL, 0)
   espconn_regist_recvcb(&pstate->tcp_conn, comm_hxdt_recv_cb);
   espconn_regist_sentcb(&pstate->tcp_conn, comm_hxdt_sent_cb);
@@ -209,9 +224,8 @@ comm_hxdt_recon_cb(void *arg, int8_t err)
 {
   struct hxdt_state* pstate = (void*)((char*)arg - offsetof(struct hxdt_state, tcp_conn));
   struct comm_state* cstate = pstate->cstate;
-  os_printf("tcp recon\n");
   #define hxdt_error(err) if (cstate->cb) (*cstate->cb)(err, NULL, 0)
-  hxdt_error(COMM_GENERIC_ERROR);
+  hxdt_error(COMM_CLIENT_GENERIC_ERROR);
   comm_hxdt_free(pstate);
   #undef hxdt_error
 }
@@ -223,11 +237,12 @@ comm_hxdt_recv_cb(void *arg, char* buf, uint16_t len)
   struct comm_state* cstate = pstate->cstate;
   #define hxdt_error(err) if (cstate->cb) (*cstate->cb)(err, NULL, 0)
   // if overflow, set flag.
-  if (pstate->recv_error || HXDT_RECV_BUFFER_SIZE - pstate->recv_buffer_len <= len) {
+  if (pstate->recv_error || cstate->recv_buffer.size - pstate->recv_buffer_len < len) {
     pstate->recv_error = true;
     return;
   }
   os_memcpy(&pstate->recv_buffer[pstate->recv_buffer_len], buf, len);
+  pstate->recv_buffer_len += len;
   return;
   #undef hxdt_error
 }
@@ -235,7 +250,14 @@ comm_hxdt_recv_cb(void *arg, char* buf, uint16_t len)
 void ICACHE_FLASH_ATTR
 comm_hxdt_sent_cb(void *arg)
 {
-  // nothing to see here.
+  struct hxdt_state* pstate = (void*)((char*)arg - offsetof(struct hxdt_state, tcp_conn));
+  struct comm_state* cstate = pstate->cstate;
+  #define hxdt_error(err) if (cstate->cb) (*cstate->cb)(err, NULL, 0)
+  // free send buffer
+  os_free(pstate->send_buffer);
+  pstate->send_buffer = NULL;
+  pstate->send_buffer_len = 0;
+  #undef hxdt_error
 }
 
 void ICACHE_FLASH_ATTR
@@ -244,21 +266,34 @@ comm_hxdt_discon_cb(void *arg)
   struct hxdt_state* pstate = (void*)((char*)arg - offsetof(struct hxdt_state, tcp_conn));
   struct comm_state* cstate = pstate->cstate;
   #define hxdt_error(err) if (cstate->cb) (*cstate->cb)(err, NULL, 0)
-  os_printf("tcp discon\n");
   if (pstate->recv_error) {
     hxdt_error(COMM_BUFFER_OVERFLOW);
     comm_hxdt_free(pstate);
     return;
   }
   if (pstate->recv_buffer_len < 5) {
-    // length is less than HTTP minimum;
-    hxdt_error(COMM_GENERIC_ERROR);
+    // length is way less than HTTP minimum;
+    hxdt_error(COMM_SERVER_GENERIC_ERROR);
+    comm_hxdt_free(pstate);
+    return;
+  }
+  // seek for first space
+  uint32_t space_idx = 0;
+  for (uint32_t i = 0; i<pstate->recv_buffer_len; i++) { 
+    if (' ' == pstate->recv_buffer[i]) {
+      space_idx = i;
+      break; 
+    }
+  }
+  // if remaining space is not sufficient, crash
+  if (pstate->recv_buffer_len - space_idx < 4) {
+    hxdt_error(COMM_SERVER_GENERIC_ERROR);
     comm_hxdt_free(pstate);
     return;
   }
   // look for HTTP 200
-  if (os_memcmp(pstate->recv_buffer, "200", 3)) {
-    hxdt_error(COMM_GENERIC_ERROR);
+  if (os_memcmp(&pstate->recv_buffer[space_idx+1], "200", 3)) {
+    hxdt_error(COMM_SERVER_GENERIC_ERROR);
     comm_hxdt_free(pstate);
     return;
   }
@@ -272,7 +307,7 @@ comm_hxdt_discon_cb(void *arg)
   }
   if (start_idx == 0) {
     // did not find \r\n\r\n sequence, bad.
-    hxdt_error(COMM_GENERIC_ERROR);
+    hxdt_error(COMM_SERVER_GENERIC_ERROR);
     comm_hxdt_free(pstate);
     return;
   }
