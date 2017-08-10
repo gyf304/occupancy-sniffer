@@ -14,6 +14,9 @@ uint8_t ICACHE_FLASH_ATTR
 comm_create(comm_state_t* state_ptr, comm_info_t info, comm_cb_t* cb)
 {
   comm_state_t state = os_zalloc(sizeof(struct comm_state));
+  if (state == NULL) {
+    return COMM_MALLOC_ERROR;
+  }
   state->protocol = info.protocol;
   state->send_buffer.buffer = os_malloc(info.send_buffer_size);
   if (state->send_buffer.buffer == NULL) {
@@ -22,6 +25,14 @@ comm_create(comm_state_t* state_ptr, comm_info_t info, comm_cb_t* cb)
   }
   state->send_buffer.len = 0;
   state->send_buffer.size = info.send_buffer_size;
+
+  state->recv_buffer.buffer = os_malloc(info.recv_buffer_size);
+  if (state->recv_buffer.buffer == NULL) {
+    comm_destroy(state);
+    return COMM_MALLOC_ERROR;
+  }
+  state->recv_buffer.len = 0;
+  state->recv_buffer.size = info.recv_buffer_size;
 
   switch (info.protocol) {
     case COMM_PROTOCOL_HXDT:
@@ -32,15 +43,10 @@ comm_create(comm_state_t* state_ptr, comm_info_t info, comm_cb_t* cb)
       }
       os_memcpy(state->info.hxdt, info.hxdt, sizeof(struct hxdt_info));
       break;
+    default:
+      comm_destroy(state);
+      return COMM_UNSUPPORTED_PROTOCOL;
   }
-
-  state->recv_buffer.buffer = os_malloc(info.recv_buffer_size);
-  if (state->recv_buffer.buffer == NULL) {
-    comm_destroy(state);
-    return COMM_MALLOC_ERROR;
-  }
-  state->recv_buffer.len = 0;
-  state->recv_buffer.size = info.recv_buffer_size;
 
   state->cb = cb;
   *state_ptr = state;

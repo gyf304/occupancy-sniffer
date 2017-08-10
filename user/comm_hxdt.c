@@ -24,7 +24,6 @@
 struct hxdt_header {
   uint32_t version;
   uint32_t xtea_length;
-  uint32_t payload_length;
   uint8_t ctr_iv[8];
   uint8_t cbc_mac[8];
 };
@@ -56,7 +55,6 @@ void comm_hxdt_recv_cb(void *arg, char* buf, uint16_t len);
 void comm_hxdt_sent_cb(void *arg);
 void comm_hxdt_discon_cb(void *arg);
 void comm_hxdt_recon_cb(void *arg, int8_t err);
-
 void comm_hxdt_free(struct hxdt_state* pstate);
 
 void ICACHE_FLASH_ATTR
@@ -70,8 +68,8 @@ comm_send_hxdt(comm_state_t cstate)
   }
   pstate->cstate = cstate;
   const struct hxdt_info* info = cstate->info.hxdt;
-  const uint32_t xtea_size = ROUND_UP(cstate->send_buffer.len, XTEA_BLOCK_SIZE);
-  // round up to XTEA_BLOCK_SIZE
+  const uint32_t xtea_size = ROUND_UP(cstate->send_buffer.len + 4, XTEA_BLOCK_SIZE);
+  // round up to XTEA_BLOCK_SIZE, add 4 bytes of payload
   // initialize tcp buffer
   uint8_t* hxdt_buffer = os_malloc(HXDT_OVERHEAD_SIZE + xtea_size);
   pstate->send_buffer = hxdt_buffer;
@@ -109,20 +107,22 @@ comm_send_hxdt(comm_state_t cstate)
     return;
   }
   uint8_t* cryptogram_ptr = ((uint8_t*)header_ptr) + sizeof(struct hxdt_header);
+  uint8_t* ciphertext_ptr = cryptogram_ptr + 4;
   header->version = htobe32(0);
   // write data lengths
   header->xtea_length = htobe32(xtea_size);
-  header->payload_length = htobe32(cstate->send_buffer.len);
+  uint32_t payload_length = htobe32(cstate->send_buffer.len);
+  os_memcpy(cryptogram_ptr, &payload_length, 4);
   // generate iv
   os_memset(&header->ctr_iv[0], 0, XTEA_BLOCK_SIZE);
   os_get_random(&header->ctr_iv[0], XTEA_BLOCK_SIZE / 2);
   // copy content
-  os_memcpy(cryptogram_ptr, cstate->send_buffer.buffer, cstate->send_buffer.len);
+  os_memcpy(ciphertext_ptr, cstate->send_buffer.buffer, cstate->send_buffer.len);
   // pad
-  os_memset(cryptogram_ptr + cstate->send_buffer.len, 0, xtea_size - cstate->send_buffer.len);
+  os_memset(ciphertext_ptr + cstate->send_buffer.len, 0, XTEA_BLOCK_SIZE);
   // calculate tcp buffer size...
   pstate->send_buffer_len = http_header_len + sizeof(struct hxdt_header) + xtea_size;
-  // encrypt using xtea-ctr
+  // initialize crypto
   xtea_ctr_info_t ctr_info;
   xtea_cbc_mac_info_t mac_info;
   ctr_info.key = &info->encrypt_key[0];
@@ -156,7 +156,6 @@ comm_send_hxdt(comm_state_t cstate)
       break;
     case ESPCONN_INPROGRESS:
       // ip will be provided upon callback...
-      os_printf("dns wait\n");
       pstate->status = HXDT_STATUS_TCP_CONN;
       break;
     default:
