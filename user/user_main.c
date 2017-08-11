@@ -16,6 +16,8 @@ static os_timer_t discover_timer;
   see sniff.c for sniffing related stuffs
 */
 
+static uint8_t sniffer_mac[6];
+
 static const wifi_client_info_t wifi_info =
 { SSID, PASSWORD, 5000 };
 
@@ -73,6 +75,12 @@ void ICACHE_FLASH_ATTR
 after_init()
 {
   dbg_printf("[INFO] DEBUG MODE\n");
+  os_printf("[INFO] Compile Date & Time: %s %s\n", __DATE__, __TIME__);
+  wifi_get_macaddr(0, &sniffer_mac[0]);
+  os_printf("[INFO] Sniffer MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+              sniffer_mac[0], sniffer_mac[1], 
+              sniffer_mac[2], sniffer_mac[3], 
+              sniffer_mac[4], sniffer_mac[5]);
   led_blink(BLINK_POWER_ON);
   discover_setup();
 }
@@ -80,7 +88,7 @@ after_init()
 void ICACHE_FLASH_ATTR
 discover_setup() {
   // initialize discover;
-  dbg_printf("[INFO] discover_setup\n");
+  dbg_printf("[INFO] Discover Setup\n");
   discover_init(&device_cb);
   // setup timer for SNIFF_TIME
   os_timer_disarm(&discover_timer);
@@ -88,12 +96,10 @@ discover_setup() {
   os_timer_arm(&discover_timer, SNIFF_TIME * 1000, 0);
   // initialize communication
   comm_create(&report_comm_state, report_comm_info, report_cb);
-  // write string discover
-  comm_write(report_comm_state, "discover", 8);
+  // write string for discover mode, ver 1
+  comm_write(report_comm_state, "disc1\0\0\0", 8);
   // write mac addr
-  uint8_t mac[6];
-  wifi_get_macaddr(0, &mac[0]);
-  comm_write(report_comm_state, &mac[0], 6);
+  comm_write(report_comm_state, &sniffer_mac[0], 6);
   // write discovery time frame
   uint16_t time = htobe16((uint16_t)SNIFF_TIME);
   comm_write(report_comm_state, &time, 2);
@@ -162,4 +168,3 @@ wifi_client_cb(uint32_t status)
       break;
   }
 }
-

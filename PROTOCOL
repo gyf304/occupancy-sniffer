@@ -1,7 +1,0 @@
-Byte    Description
-0-3     VERSION / MODE. Reserved, currently always 0;
-4-7     xtea Encrypted Length. 32 bits unsigned big-endian.
-8-11   XTEA-IV, be
-12-19   XTEA-CBC-MAC, big-endian.
-20++    XTEA-CTR Data, big-endian.
-        |- 1-3 32 bit BE payload length
