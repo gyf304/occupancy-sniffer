@@ -176,7 +176,9 @@ comm_hxdt_dns_cb(const char *name, ip_addr_t *ipaddr, void *arg)
   struct hxdt_state* pstate = (void*)((char*)arg - offsetof(struct hxdt_state, tcp_conn));
   struct comm_state* cstate = pstate->cstate;
   const struct hxdt_info* info = cstate->info.hxdt;
-  os_printf("dns cb\n");
+  if (ipaddr) {
+    os_memcpy(&pstate->ip, ipaddr, 4);
+  }
   #define hxdt_error(err) if (cstate->cb) (*cstate->cb)(err, NULL, 0)
   //if (ipaddr == NULL) pstate->status = HXDT_STATUS_ERROR;
   if (pstate->ip.addr == 0) {
@@ -185,7 +187,6 @@ comm_hxdt_dns_cb(const char *name, ip_addr_t *ipaddr, void *arg)
     comm_hxdt_free(pstate);
     return;
   }
-  uint8_t* ip = (void*)ipaddr;
   // configure tcp
   pstate->recv_error = false;
   pstate->tcp_conn.proto.tcp = &pstate->tcp_info;
