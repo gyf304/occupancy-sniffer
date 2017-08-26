@@ -69,8 +69,6 @@ comm_send_hxdt(comm_state_t cstate)
   pstate->cstate = cstate;
   const struct hxdt_info* info = cstate->info.hxdt;
   const uint32_t xtea_size = ROUND_UP(cstate->send_buffer.len + 4, XTEA_BLOCK_SIZE);
-  // round up to XTEA_BLOCK_SIZE, add 4 bytes of payload
-  // initialize tcp buffer
   uint8_t* hxdt_buffer = os_malloc(HXDT_OVERHEAD_SIZE + xtea_size);
   pstate->send_buffer = hxdt_buffer;
   if (hxdt_buffer == NULL) {

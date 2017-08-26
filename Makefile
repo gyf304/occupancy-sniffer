@@ -43,10 +43,10 @@ EXTRA_INCDIR    = include
 LIBS		= c gcc hal pp phy net80211 lwip wpa main
 
 # compiler flags using during compilation of source files
-CFLAGS		= -Wall -Wno-unused-variable -Wno-unused-but-set-variable -std=c99 -Os -g -O2 -Wpointer-arith -Wundef -Werror -Wl,-EL -fno-inline-functions -nostdlib -mlongcalls -mtext-section-literals  -D__ets__ -DICACHE_FLASH -DDEBUG
+CFLAGS		= -I$(SDK_BASE)/include -L$(SDK_BASE)/lib -Wall -Wno-unused-variable -Wno-unused-but-set-variable -std=c99 -Os -g -O2 -Wpointer-arith -Wundef -Werror -Wl,-EL -fno-inline-functions -nostdlib -mlongcalls -mtext-section-literals  -D__ets__ -DICACHE_FLASH -DDEBUG
 
 # linker flags used to generate the main object file
-LDFLAGS		= -nostdlib -Wl,--no-check-sections -u call_user_start -Wl,-static
+LDFLAGS		= -I$(SDK_BASE)/include -L$(SDK_BASE)/lib -nostdlib -Wl,--no-check-sections -u call_user_start -Wl,-static
 
 # linker script used for the above linkier step
 LD_SCRIPT	= eagle.app.v6.ld
