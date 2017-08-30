@@ -19,7 +19,7 @@ static os_timer_t discover_timer;
 static uint8_t sniffer_mac[6];
 
 static const wifi_client_info_t wifi_info =
-{ SSID, PASSWORD, 5000 };
+{ WIFI_SSID, WIFI_PASSWORD, 5000 };
 
 static const hxdt_info_t report_hxdt_info = 
 {
@@ -104,7 +104,7 @@ discover_setup() {
   uint16_t time = htobe16((uint16_t)SNIFF_TIME);
   comm_write(report_comm_state, &time, 2);
   // start discovery
-  discover_start(1);
+  discover_start(SNIFF_CHANNEL);
 }
 
 void ICACHE_FLASH_ATTR

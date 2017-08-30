@@ -26,7 +26,7 @@ PATH := $(XTENSA_TOOLS_ROOT):$(PATH)
 SDK_BASE	?= /Volumes/esp/esp-open-sdk/sdk
 
 # esptool.py path and port
-ESPTOOL		?= /Volumes/esp/esp-open-sdk/xtensa-lx106-elf/bin/esptool.py
+ESPTOOL		?= $(XTENSA_TOOLS_ROOT)/esptool.py
 ESPPORT		?= /dev/cu.SLAB_USBtoUART
 
 SCREEN		?= screen
