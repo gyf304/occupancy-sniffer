@@ -26,11 +26,17 @@ PATH := $(XTENSA_TOOLS_ROOT):$(PATH)
 SDK_BASE	?= /Volumes/esp/esp-open-sdk/sdk
 
 # esptool.py path and port
-ESPTOOL		?= $(XTENSA_TOOLS_ROOT)/esptool.py
-ESPPORT		?= /dev/cu.SLAB_USBtoUART
+ESPTOOL		?= /Volumes/esp/esptool-2.1/esptool.py
+ESPPORT		?= /dev/cu.wchusbserial1430
+ESPTOOL_FLAGS	?= 
+ESPTOOL_WRITE_FLAGS ?= -fm dout -fs 1MB -ff 20m
+ESPTOOL_BAUDRATE = 115200
 
-SCREEN		?= screen
-BAUDRATE	= 115200
+TTY		?= miniterm.py
+TTY_BAUDRATE	= 115200
+TTY_DEBUG_BAUDRATE	= 74880
+
+# 74880
 
 # name for the target project
 TARGET		= app
@@ -49,7 +55,8 @@ CFLAGS		= -I$(SDK_BASE)/include -L$(SDK_BASE)/lib -Wall -Wno-unused-variable -Wn
 LDFLAGS		= -I$(SDK_BASE)/include -L$(SDK_BASE)/lib -nostdlib -Wl,--no-check-sections -u call_user_start -Wl,-static
 
 # linker script used for the above linkier step
-LD_SCRIPT	= eagle.app.v6.ld
+# LD_SCRIPT	= eagle.app.v6.ld
+LD_SCRIPT = eagle.app.v6.1m.ld
 
 # various paths from the SDK used in this project
 SDK_LIBDIR	= lib
@@ -60,13 +67,16 @@ SDK_INCDIR	= include include/json
 # these are the names and options to generate them
 FW_FILE_1_ADDR	= 0x00000
 FW_FILE_2_ADDR	= 0x10000
+FW_INIT_DATA_DEFAULT_ADDR = 0xFC000
+FW_BLANK_ADDR = 0xFE000
+
+FW_INIT_DATA_DEFAULT_BIN = $(SDK_BASE)/bin/esp_init_data_default.bin
+FW_BLANK_BIN = $(SDK_BASE)/bin/blank.bin
 
 # select which tools to use as compiler, librarian and linker
 CC		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-gcc
 AR		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-ar
 LD		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-gcc
-
-
 
 ####
 #### no user configurable options below here
@@ -134,10 +144,22 @@ $(FW_BASE):
 	$(Q) mkdir -p $@
 
 flash: $(FW_FILE_1) $(FW_FILE_2)
-	$(ESPTOOL) --port $(ESPPORT) write_flash $(FW_FILE_1_ADDR) $(FW_FILE_1) $(FW_FILE_2_ADDR) $(FW_FILE_2)
+	$(ESPTOOL) --port $(ESPPORT) --baud $(ESPTOOL_BAUDRATE) write_flash $(ESPTOOL_WRITE_FLAGS) $(FW_FILE_1_ADDR) $(FW_FILE_1) $(FW_FILE_2_ADDR) $(FW_FILE_2)
 
-monitor:
-	$(SCREEN) $(ESPPORT) $(BAUDRATE)
+erase:
+	$(ESPTOOL) --port $(ESPPORT) --baud $(ESPTOOL_BAUDRATE) erase_flash
+
+flash-init:
+	$(ESPTOOL) --port $(ESPPORT) --baud $(ESPTOOL_BAUDRATE) write_flash --no-compress $(FW_INIT_DATA_DEFAULT_ADDR) $(FW_INIT_DATA_DEFAULT_BIN) $(FW_BLANK_ADDR) $(FW_BLANK_BIN)
+
+get-mac:
+	$(ESPTOOL) --port $(ESPPORT) --baud $(ESPTOOL_BAUDRATE) read_mac
+
+tty:
+	$(TTY) $(ESPPORT) $(TTY_BAUDRATE)
+
+tty-debug:
+	$(TTY) $(ESPPORT) $(TTY_DEBUG_BAUDRATE)
 
 clean:
 	$(Q) rm -rf $(FW_BASE) $(BUILD_BASE)
