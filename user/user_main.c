@@ -13,7 +13,7 @@
 
 static os_timer_t discover_timer;
 /*
-  see sniff.c for sniffing related stuffs
+  see discover.c for sniffing related stuffs
 */
 
 static uint8_t sniffer_mac[6];
